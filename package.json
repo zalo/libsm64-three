@@ -1,0 +1,11 @@
+{
+	"scripts": {
+		"build": "esbuild ./src/main.js --bundle --minify --sourcemap --format=esm --outdir=./build"
+	},
+	"dependencies": {
+		"cmem_helpers": "^0.0.12",
+		"esbuild": "^0.23.0",
+		"three": "^0.166.0",
+		"three-mesh-bvh": "^0.7.6"
+	}
+}
