@@ -44,6 +44,8 @@ export default class Main {
         this.libsm64 = await libs64Loader();
         const { struct, structClass, setString, getString } = memhelpers(this.libsm64.HEAPU8.buffer, this.libsm64._malloc)
 
+        // THE FOLLOWING IS LARGELY BASED ON CODE RIPPED FROM https://github.com/osnr/Webrio -------------------------------
+
         // Initialize the SM64 Global State by loading the rom into it
         let rom = new Uint8Array(await (await fetch(this.assetsPath+"baserom.us.z64")).arrayBuffer());
         let heapRomPtr = this.libsm64._malloc(rom.length);

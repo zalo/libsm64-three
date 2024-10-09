@@ -21,5 +21,6 @@ npm run build
 After building, make sure to edit the index .html to point from `"./src/main.js"` to `"./build/main.js"`.
 
  # Dependencies
+ - [Webrio](https://github.com/osnr/Webrio) (Emscripten libsm64 Foundation and Reference)
  - [three.js](https://github.com/mrdoob/three.js/) (3D Rendering Engine)
  - [esbuild](https://github.com/evanw/esbuild/) (Bundler)

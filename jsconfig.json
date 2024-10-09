@@ -7,7 +7,7 @@
     "typeAcquisition": {
         "include": [
             "three",
-            "manifold-3d"
+            "cmem_helpers"
         ]
     }
 }
