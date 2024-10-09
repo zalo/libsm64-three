@@ -9,6 +9,9 @@
       <img src="https://img.shields.io/github/license/zalo/libsm64-three" title="License: Apache V2"></a>-->  <!-- No idea what license this should be! -->
 </p>
 
+[!WARNING]
+This repo is non-functional at the moment and still a work-in progress.
+
 A simple testbed for running libsm64 in the browser.
 
  # Building
