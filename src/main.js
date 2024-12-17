@@ -20,11 +20,11 @@ export default class Main {
         // Configure Settings
         this.sm64Params = {
             loadRom: this.loadFromFilePicker.bind(this),
-            tickEveryMS: 33,
+            tickEveryMS: 33.333,
         };
         this.gui = new GUI();
         this.gui.add(this.sm64Params, 'loadRom' ).name( 'Load ROM' );
-        this.gui.add(this.sm64Params, 'tickEveryMS', 1, 100, 1).name( 'TickEveryMS' );
+        this.gui.add(this.sm64Params, 'tickEveryMS', 1, 100).name( 'TickEveryMS' );
 
         // Construct the render world
         this.world = new World(this);
@@ -223,7 +223,6 @@ export default class Main {
                                        this.webrioInterPositionArr[2] * 0.01);
         this.world.controls.update();
         this.webrioLastPosition.copy(this.webrioMesh.position);
-
 
         // Render the three.js Scene
         this.world.renderer.render(this.world.scene, this.world.camera);
