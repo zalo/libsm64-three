@@ -53,14 +53,13 @@ export default class World {
 
         // Geometry
 
-        this.ground = new THREE.Mesh(
-            new THREE.PlaneGeometry( 20, 20, 1, 1 ),
-            new THREE.MeshPhongMaterial( { color: 0xa0adaf, shininess: 150 } )
-        );				
-
-        this.ground.rotation.x = - Math.PI / 2; // rotates X/Y to X/Z
-        this.ground.receiveShadow = true;
-        this.scene.add( this.ground );
+        //this.ground = new THREE.Mesh(
+        //    new THREE.PlaneGeometry( 20, 20, 1, 1 ),
+        //    new THREE.MeshPhongMaterial( { color: 0xa0adaf, shininess: 150 } )
+        //);				
+        //this.ground.rotation.x = - Math.PI / 2; // rotates X/Y to X/Z
+        //this.ground.receiveShadow = true;
+        //this.scene.add( this.ground );
         
         this.helper = new THREE.GridHelper( 20, 20 );
         this.helper.material.opacity = 1.0;
@@ -82,11 +81,12 @@ export default class World {
         this.draggableObjects = [];
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.target.set(0, 2, 0);
+        this.controls.enablePan = false;
         this.controls.panSpeed = 2;
         this.controls.zoomSpeed = 1;
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.10;
-        this.controls.screenSpacePanning = true;
+        //this.controls.screenSpacePanning = false;
         this.controls.update();
         this.controls.addEventListener('change', () => this.viewDirty = true);
 

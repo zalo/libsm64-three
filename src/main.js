@@ -2,7 +2,7 @@ import * as THREE from '../node_modules/three/build/three.module.js';
 import { GUI } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
 import World from './World.js';
 import memhelpers from '../node_modules/cmem_helpers/dist/cmem_helpers.modern.js'
-import libs64Loader from './libsm64.js'
+import webrioLoader from './webrio.js'
 
 /** The fundamental set up and animation structures for 3D Visualization */
 export default class Main {
@@ -41,129 +41,78 @@ export default class Main {
         this.assetsPath = this.isDeployed ? './assets/' : '../assets/';
 
         // Load the SM64 WASM Library
-        this.libsm64 = await libs64Loader();
-        const { struct, structClass, setString, getString } = memhelpers(this.libsm64.HEAPU8.buffer, this.libsm64._malloc)
+        this.webrio = await webrioLoader();
+        window.Webrio = this.webrio; // for debugging.
+        //const { struct, structClass, setString, getString } = memhelpers(this.webrio.HEAPU8.buffer, this.webrio._malloc)
 
-        // THE FOLLOWING IS LARGELY BASED ON CODE RIPPED FROM https://github.com/osnr/Webrio -------------------------------
+        // THE FOLLOWING IS ENTIRELY BASED ON CODE RIPPED FROM https://github.com/osnr/Webrio -------------------------------
 
         // Initialize the SM64 Global State by loading the rom into it
         let rom = new Uint8Array(await (await fetch(this.assetsPath+"baserom.us.z64")).arrayBuffer());
-        let heapRomPtr = this.libsm64._malloc(rom.length);
-        let heapRom = new Uint8Array(this.libsm64.HEAPU8.buffer, heapRomPtr, rom.length);
+        let heapRomPtr = this.webrio._malloc(rom.length);
+        let heapRom = new Uint8Array(this.webrio.HEAPU8.buffer, heapRomPtr, rom.length);
         heapRom.set(rom);
         let heapTexLength = (64 * 11) * 64 * 4;
-        let heapTexPtr = this.libsm64._malloc(heapTexLength);
+        let heapTexPtr = this.webrio._malloc(heapTexLength);
 
         // Initialize the player's mesh buffers; these will get updated in the player tick
         const sizeofFloat = 4;
         const SM64_GEO_MAX_TRIANGLES = 1024;
-        let positionBufPtr = this.libsm64._malloc(sizeofFloat * 9 * SM64_GEO_MAX_TRIANGLES);
-        let colorBufPtr    = this.libsm64._malloc(sizeofFloat * 9 * SM64_GEO_MAX_TRIANGLES);
-        let normalBufPtr   = this.libsm64._malloc(sizeofFloat * 9 * SM64_GEO_MAX_TRIANGLES);
-        let uvBufPtr       = this.libsm64._malloc(sizeofFloat * 6 * SM64_GEO_MAX_TRIANGLES);
-        let positionArr = new Float32Array(this.libsm64.HEAPF32.buffer, positionBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
-        let colorArr    = new Float32Array(this.libsm64.HEAPF32.buffer,    colorBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
-        let normalArr   = new Float32Array(this.libsm64.HEAPF32.buffer,   normalBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
-        let uvArr       = new Float32Array(this.libsm64.HEAPF32.buffer,       uvBufPtr, 6 * SM64_GEO_MAX_TRIANGLES);
+        let positionBufPtr = this.webrio._malloc(sizeofFloat * 9 * SM64_GEO_MAX_TRIANGLES);
+        let colorBufPtr    = this.webrio._malloc(sizeofFloat * 9 * SM64_GEO_MAX_TRIANGLES);
+        let normalBufPtr   = this.webrio._malloc(sizeofFloat * 9 * SM64_GEO_MAX_TRIANGLES);
+        let uvBufPtr       = this.webrio._malloc(sizeofFloat * 6 * SM64_GEO_MAX_TRIANGLES);
 
-        const SM64MarioGeometryBuffers = struct({
-            position: 'Uint32',
-            normal  : 'Uint32',
-            color   : 'Uint32',
-            uv      : 'Uint32',
-            numTrianglesUsed: 'Uint16'
-        });
-        this.marioGeometry = SM64MarioGeometryBuffers({ 
-            position: positionBufPtr, 
-            normal: normalBufPtr, 
-            color: colorBufPtr, 
-            uv: uvBufPtr, 
-            numTrianglesUsed: 0 });
-        const SM64MarioInputs = struct({
-            camLookX: 'Float32',
-            camLookZ: 'Float32',
-            stickX  : 'Float32',
-            stickY  : 'Float32',
-            buttonA : 'Uint8',
-            buttonB : 'Uint8',
-            buttonZ : 'Uint8'
-        });
-        this.inputs = SM64MarioInputs();
-        const SM64ObjectTransform = struct({
-            positionX     : 'Float32',
-            positionY     : 'Float32',
-            positionZ     : 'Float32',
-            eulerRotationX: 'Float32',
-            eulerRotationY: 'Float32',
-            eulerRotationZ: 'Float32'
-        });
-        this.sm64Transform = SM64ObjectTransform();
-        const SM64MarioState = struct({
-            positionX     : 'Float32',
-            positionY     : 'Float32',
-            positionZ     : 'Float32',
-            velocityX     : 'Float32',
-            velocityY     : 'Float32',
-            velocityZ     : 'Float32',
-            faceAngle     : 'Float32',
-            health        : 'Int16',
-            action        : 'Uint32',
-            flags         : 'Uint32',
-            particleFlags : 'Uint32',
-            invincTimer   : 'Int16'
-        });
-        this.outState = SM64MarioState();
+        Webrio._webrio_init(heapRomPtr, heapTexPtr,
+                            positionBufPtr, colorBufPtr,
+                            normalBufPtr, uvBufPtr);
 
-        const SM64Surface = struct({
-            type: 'Int16',
-            force: 'Int16',
-            terrain: 'Uint16',
-            vAX: 'Int32',
-            vAY: 'Int32',
-            vAZ: 'Int32',
-            vBX: 'Int32',
-            vBY: 'Int32',
-            vBZ: 'Int32',
-            vCX: 'Int32',
-            vCY: 'Int32',
-            vCZ: 'Int32'
-        });
-        this.surfaces = SM64Surface({
-            type:    0,
-            force:   0,
-            terrain: 0,
-            vAX: -1000,
-            vAY:     0,
-            vAZ:     0,
-            vBX:  1000,
-            vBY:     0,
-            vBZ:  1000,
-            vCX:  1000,
-            vCY:     0,
-            vCZ: -1000
-        });
+        // Load world:
+        const surfaces = [];
+        const surfacesCount = Webrio._webrio_get_surfaces_count();
+        for (let i = 0; i < surfacesCount; i++) {
+            const verticesPtr = Webrio._malloc(4 * 9); // int32_t[3][3]
+            const verticesArr = new Int32Array(Webrio.HEAP32.buffer, verticesPtr, 4 * 9);
+            Webrio._webrio_get_surface_vertices(i, verticesPtr);
 
-        // This doesn't seem to work at all!
-        this.libsm64._sm64_register_debug_print_function((str)=>{console.log(getString(str));});
-
-        // Initialize the SM64 Global State and retrieve the player texture
-        this.libsm64._sm64_global_init(heapRomPtr, heapTexPtr); // This works.
-
-        // Load the static surfaces
-        this.libsm64._sm64_static_surfaces_load(this.surfaces._address, 1); // I don't know if this works.
-
-        // Create the player
-        this.marioId = this.libsm64._sm64_mario_create( 0, 2000, 0 ); // THIS FAILS AND OUTPUTS -1!
-        if(this.marioId == -1){
-            console.error("Failed to create Mario; he is not over terrain!");
+            surfaces.push({
+                type: Webrio._webrio_get_surface_type(i),
+                force: Webrio._webrio_get_surface_force(i),
+                terrain: Webrio._webrio_get_surface_terrain(i),
+                vertices: verticesArr
+            });
         }
+        //renderer.loadSurfaces(surfaces);
 
-        // THIS SHOULD PRINT AN ERROR TO THE CONSOLE, BUT DOESN'T!
-        this.libsm64._sm64_audio_tick(0, 0, 0);
+        // Create a new mesh, and accumulate the surface triangles
+        // First, create the vertex buffer for three.js
+        this.levelVertices = new Float32Array(surfacesCount * 9);
+        for (let i = 0; i < surfacesCount; i++) {
+            const surface = surfaces[i];
+            for (let j = 0; j < 3; j++) {
+                this.levelVertices[i * 9 + j * 3 + 0] = surface.vertices[j * 3 + 0] / 100;
+                this.levelVertices[i * 9 + j * 3 + 1] = surface.vertices[j * 3 + 1] / 100;
+                this.levelVertices[i * 9 + j * 3 + 2] = surface.vertices[j * 3 + 2] / 100;
+            }
+        }
+        // Create the geometry
+        this.levelGeometry = new THREE.BufferGeometry();
+        this.levelGeometry.setAttribute('position', new THREE.BufferAttribute(this.levelVertices, 3));
+        this.levelGeometry.computeVertexNormals();
+        this.levelMaterial = new THREE.MeshPhysicalMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
+        this.levelMesh = new THREE.Mesh(this.levelGeometry, this.levelMaterial);
+        this.world.scene.add(this.levelMesh);
 
-        // Display the Texture in three.js
-        let heapTex = new Uint8Array(this.libsm64.HEAPU8.buffer, heapTexPtr, heapTexLength);
-        let texture = new THREE.DataTexture(heapTex, 64 * 11, 64, THREE.RGBAFormat, THREE.UnsignedByteType);
+        // Load webrio's Data
+        let positionArr = new Float32Array(this.webrio.HEAPF32.buffer, positionBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
+        let colorArr    = new Float32Array(this.webrio.HEAPF32.buffer,    colorBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
+        let normalArr   = new Float32Array(this.webrio.HEAPF32.buffer,   normalBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
+        let uvArr       = new Float32Array(this.webrio.HEAPF32.buffer,       uvBufPtr, 6 * SM64_GEO_MAX_TRIANGLES);
+        // Load the Texture and Display in three.js
+        const heapTex = new Uint8Array(Webrio.HEAPU8.buffer, heapTexPtr, heapTexLength);
+        let texture = new THREE.DataTexture(heapTex, 
+                                            Webrio._webrio_get_sm64_texture_width(), 
+                                            Webrio._webrio_get_sm64_texture_height(), THREE.RGBAFormat, THREE.UnsignedByteType);
         texture.needsUpdate = true;
         texture.flipY = true;
         let material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
@@ -172,18 +121,77 @@ export default class Main {
         plane.position.set(0, 1, 0);
         plane.scale.set(11, 1, 1);
         this.world.scene.add(plane);
+
+        this.webrioPositionPtr = Webrio._malloc(sizeofFloat * 3);
+        this.webrioPositionArr = new Float32Array(Webrio.HEAPF32.buffer, this.webrioPositionPtr, 3);
+      
+        this.webrioGeometry = new THREE.BufferGeometry();
+        this.webrioGeometry.setAttribute('position', new THREE.BufferAttribute(positionArr, 3));
+        this.webrioGeometry.setAttribute('color'   , new THREE.BufferAttribute(   colorArr, 3));
+        this.webrioGeometry.setAttribute('normal'  , new THREE.BufferAttribute(  normalArr, 3));
+        this.webrioGeometry.setAttribute('uv'      , new THREE.BufferAttribute(      uvArr, 2));
+        this.webrioMaterial = new THREE.MeshPhysicalMaterial({ side: THREE.DoubleSide, vertexColors: true }); //map: texture, 
+        this.webrioMesh = new THREE.Mesh(this.webrioGeometry, this.webrioMaterial);
+        this.world.scene.add(this.webrioMesh);
+
+        this.webrioLastPosition = new THREE.Vector3(0, 0, 0);
+
+        this.keysDown = {};
+        window.addEventListener('keydown', (e) => { this.keysDown[e.key] = true; });
+        window.addEventListener('keyup'  , (e) => { delete this.keysDown[e.key]; });
+
+        this.lastTimeMS = 0;
     }
 
     /** Update the simulation */
     update(timeMS) {
         this.timeMS = timeMS;
-        this.world.renderer.render(this.world.scene, this.world.camera);
+        this.deltaTimeMS = timeMS - this.lastTimeMS;
 
-        if(this.libsm64 && this.outState){
-            this.libsm64._sm64_mario_tick(this.marioId, this.inputs._address, this.outState._address, this.marioGeometry._address);
-            //console.log(this.outState.positionY);
+        if (this.deltaTimeMS > 25) {
+            // Get the keyboard inputs
+            let stickX  = 0.0;
+            let stickY  = 0.0;
+            let buttonA = 0.0;
+            if ("ArrowLeft"  in this.keysDown) { stickX += 1.0; }
+            if ("ArrowRight" in this.keysDown) { stickX -= 1.0; }
+            if ("ArrowUp"    in this.keysDown) { stickY += 1.0; }
+            if ("ArrowDown"  in this.keysDown) { stickY -= 1.0; }
+            if ("z"          in this.keysDown) { buttonA = 1.0; }
+
+            // Rotate the Joystick by the Camera Rotation
+            let stick = new THREE.Vector3(stickX, 0, stickY).applyQuaternion(this.world.camera.quaternion);
+            if (stick.length() > 0.0) { stick.normalize(); }
+
+            // Tick the Game
+            const numTrianglesUsed = Webrio._webrio_tick(0, 0, stick.x, stick.z, buttonA, 0, 0, this.webrioPositionPtr);
+
+            // Update Webrio's Mesh
+            this.webrioMesh.scale.set(0.01, 0.01, 0.01);
+            for(let i = 0; i < this.webrioMesh.geometry.getAttribute('position').array.length; i++){
+                this.webrioMesh.geometry.getAttribute('position').array[i] -= this.webrioPositionArr[i % 3];
+            }
+            this.webrioMesh.position.set(this.webrioPositionArr[0] * 0.01, 
+                                        this.webrioPositionArr[1] * 0.01, 
+                                        this.webrioPositionArr[2] * 0.01);
+            this.webrioMesh.geometry.getAttribute('position').needsUpdate = true;
+            this.webrioMesh.geometry.getAttribute('color'   ).needsUpdate = true;
+            this.webrioMesh.geometry.getAttribute('normal'  ).needsUpdate = true;
+            this.webrioMesh.geometry.getAttribute('uv'      ).needsUpdate = true;
+
+            // Update the Camera
+            this.world.camera.position.add(this.webrioMesh.position.clone().sub(this.webrioLastPosition));
+            this.webrioLastPosition.copy(this.webrioMesh.position);
+            this.world.controls.target.set(this.webrioPositionArr[0] * 0.01,
+                                           this.webrioPositionArr[1] * 0.01 + 1.5,
+                                           this.webrioPositionArr[2] * 0.01);
+            this.world.controls.update();
+
+            this.lastTimeMS = timeMS;
         }
 
+        // Render the three.js Scene
+        this.world.renderer.render(this.world.scene, this.world.camera);
         this.world.stats.update();
     }
 

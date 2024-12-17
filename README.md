@@ -10,7 +10,7 @@
 </p>
 
 [!WARNING]
-This repo is non-functional at the moment and still a work-in progress.
+This repo is currently non-functional and still a work-in progress.
 
 A simple testbed for running libsm64 in the browser.
 
