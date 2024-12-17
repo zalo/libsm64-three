@@ -19,17 +19,12 @@ export default class Main {
     async deferredConstructor() {
         // Configure Settings
         this.sm64Params = {
-            //loadMesh: this.loadMesh.bind(this),
-            //showMesh: true,
+            loadRom: this.loadFromFilePicker.bind(this),
             tickEveryMS: 33,
         };
         this.gui = new GUI();
-        //this.gui.add(this.latticeParams, 'loadMesh' ).name( 'Load Mesh' );
-        //this.gui.add(this.contactParams, 'showMesh').name( 'Show Mesh' ).onFinishChange(async (value) => {
-        //    if(this.mesh){ this.mesh.visible = value; }});
+        this.gui.add(this.sm64Params, 'loadRom' ).name( 'Load ROM' );
         this.gui.add(this.sm64Params, 'tickEveryMS', 1, 100, 1).name( 'TickEveryMS' );
-
-        //this.sm64Params.tickEveryMS = 33;
 
         // Construct the render world
         this.world = new World(this);
@@ -44,12 +39,36 @@ export default class Main {
         // Load the SM64 WASM Library
         this.webrio = await webrioLoader();
         window.Webrio = this.webrio; // for debugging.
-        //const { struct, structClass, setString, getString } = memhelpers(this.webrio.HEAPU8.buffer, this.webrio._malloc)
 
+        // Attempt to load the SM64 ROM
+        this.loadFromURL(this.assetsPath+"baserom.us.z64");
+    }
+
+    async loadFromURL(url) {
+        let response = await fetch(url);
+        if(response.ok){
+            let rom = new Uint8Array(await (response).arrayBuffer());
+            await this.initializeFromROM(rom);
+        }
+    }
+
+    // Load the SM64 ROM from a file picker
+    async loadFromFilePicker() {
+        let file = document.createElement('input');
+        file.type = 'file';
+        file.accept = '.z64';
+        file.onchange = async (e) => {
+            let file = e.target.files[0];
+            let rom = new Uint8Array(await file.arrayBuffer());
+            await this.initializeFromROM(rom);
+        };
+        file.click();
+    }
+
+    async initializeFromROM(rom) {
         // THE FOLLOWING IS ENTIRELY BASED ON CODE RIPPED FROM https://github.com/osnr/Webrio -------------------------------
 
         // Initialize the SM64 Global State by loading the rom into it
-        let rom = new Uint8Array(await (await fetch(this.assetsPath+"baserom.us.z64")).arrayBuffer());
         let heapRomPtr = this.webrio._malloc(rom.length);
         let heapRom = new Uint8Array(this.webrio.HEAPU8.buffer, heapRomPtr, rom.length);
         heapRom.set(rom);
@@ -83,7 +102,6 @@ export default class Main {
                 vertices: verticesArr
             });
         }
-        //renderer.loadSurfaces(surfaces);
 
         // Create a new mesh, and accumulate the surface triangles
         // First, create the vertex buffer for three.js
@@ -107,9 +125,9 @@ export default class Main {
         // Load webrio's Data
         this.positionArr     = new Float32Array(this.webrio.HEAPF32.buffer, positionBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
         this.prevPositionArr = new Float32Array(9 * SM64_GEO_MAX_TRIANGLES); this.interPositionArr = new Float32Array(9 * SM64_GEO_MAX_TRIANGLES);
-        let colorArr        = new Float32Array(this.webrio.HEAPF32.buffer,    colorBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
-        let normalArr       = new Float32Array(this.webrio.HEAPF32.buffer,   normalBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
-        let uvArr           = new Float32Array(this.webrio.HEAPF32.buffer,       uvBufPtr, 6 * SM64_GEO_MAX_TRIANGLES);
+        let colorArr         = new Float32Array(this.webrio.HEAPF32.buffer,    colorBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
+        let normalArr        = new Float32Array(this.webrio.HEAPF32.buffer,   normalBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
+        let uvArr            = new Float32Array(this.webrio.HEAPF32.buffer,       uvBufPtr, 6 * SM64_GEO_MAX_TRIANGLES);
         // Load the Texture and Display in three.js
         const heapTex = new Uint8Array(Webrio.HEAPU8.buffer, heapTexPtr, heapTexLength);
         let texture = new THREE.DataTexture(heapTex, 
