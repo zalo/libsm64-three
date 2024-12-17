@@ -1,7 +1,6 @@
 import * as THREE from '../node_modules/three/build/three.module.js';
 import { GUI } from '../node_modules/three/examples/jsm/libs/lil-gui.module.min.js';
 import World from './World.js';
-import memhelpers from '../node_modules/cmem_helpers/dist/cmem_helpers.modern.js'
 import webrioLoader from './webrio.js'
 
 /** The fundamental set up and animation structures for 3D Visualization */
@@ -22,13 +21,15 @@ export default class Main {
         this.sm64Params = {
             //loadMesh: this.loadMesh.bind(this),
             //showMesh: true,
-            resolution: 10,
+            tickEveryMS: 33,
         };
         this.gui = new GUI();
         //this.gui.add(this.latticeParams, 'loadMesh' ).name( 'Load Mesh' );
         //this.gui.add(this.contactParams, 'showMesh').name( 'Show Mesh' ).onFinishChange(async (value) => {
         //    if(this.mesh){ this.mesh.visible = value; }});
-        //this.gui.add(this.sm64Params, 'resolution', 3, 40, 1).name( 'Resolution' ).onFinishChange(async (value) => { this.updateImplicitMesh(); });
+        this.gui.add(this.sm64Params, 'tickEveryMS', 1, 100, 1).name( 'TickEveryMS' );
+
+        //this.sm64Params.tickEveryMS = 33;
 
         // Construct the render world
         this.world = new World(this);
@@ -104,10 +105,11 @@ export default class Main {
         this.world.scene.add(this.levelMesh);
 
         // Load webrio's Data
-        let positionArr = new Float32Array(this.webrio.HEAPF32.buffer, positionBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
-        let colorArr    = new Float32Array(this.webrio.HEAPF32.buffer,    colorBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
-        let normalArr   = new Float32Array(this.webrio.HEAPF32.buffer,   normalBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
-        let uvArr       = new Float32Array(this.webrio.HEAPF32.buffer,       uvBufPtr, 6 * SM64_GEO_MAX_TRIANGLES);
+        this.positionArr     = new Float32Array(this.webrio.HEAPF32.buffer, positionBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
+        this.prevPositionArr = new Float32Array(9 * SM64_GEO_MAX_TRIANGLES); this.interPositionArr = new Float32Array(9 * SM64_GEO_MAX_TRIANGLES);
+        let colorArr        = new Float32Array(this.webrio.HEAPF32.buffer,    colorBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
+        let normalArr       = new Float32Array(this.webrio.HEAPF32.buffer,   normalBufPtr, 9 * SM64_GEO_MAX_TRIANGLES);
+        let uvArr           = new Float32Array(this.webrio.HEAPF32.buffer,       uvBufPtr, 6 * SM64_GEO_MAX_TRIANGLES);
         // Load the Texture and Display in three.js
         const heapTex = new Uint8Array(Webrio.HEAPU8.buffer, heapTexPtr, heapTexLength);
         let texture = new THREE.DataTexture(heapTex, 
@@ -122,11 +124,13 @@ export default class Main {
         plane.scale.set(11, 1, 1);
         this.world.scene.add(plane);
 
-        this.webrioPositionPtr = Webrio._malloc(sizeofFloat * 3);
-        this.webrioPositionArr = new Float32Array(Webrio.HEAPF32.buffer, this.webrioPositionPtr, 3);
+        this.webrioPositionPtr      = Webrio._malloc(sizeofFloat * 3);
+        this.webrioPositionArr      = new Float32Array(Webrio.HEAPF32.buffer, this.webrioPositionPtr, 3);
+        this.webrioPrevPositionArr  = new Float32Array(3);
+        this.webrioInterPositionArr = new Float32Array(3);
       
         this.webrioGeometry = new THREE.BufferGeometry();
-        this.webrioGeometry.setAttribute('position', new THREE.BufferAttribute(positionArr, 3));
+        this.webrioGeometry.setAttribute('position', new THREE.BufferAttribute(this.interPositionArr, 3));
         this.webrioGeometry.setAttribute('color'   , new THREE.BufferAttribute(   colorArr, 3));
         this.webrioGeometry.setAttribute('normal'  , new THREE.BufferAttribute(  normalArr, 3));
         this.webrioGeometry.setAttribute('uv'      , new THREE.BufferAttribute(      uvArr, 2));
@@ -140,15 +144,17 @@ export default class Main {
         window.addEventListener('keydown', (e) => { this.keysDown[e.key] = true; });
         window.addEventListener('keyup'  , (e) => { delete this.keysDown[e.key]; });
 
-        this.lastTimeMS = 0;
+        this.lastTimeMS = 0.1;
+        this.fixedTimestamp = 0.1;
     }
 
     /** Update the simulation */
     update(timeMS) {
+        if(!this.lastTimeMS) { return; }
         this.timeMS = timeMS;
-        this.deltaTimeMS = timeMS - this.lastTimeMS;
+        //this.deltaTimeMS = timeMS - this.lastTimeMS;
 
-        if (this.deltaTimeMS > 25) {
+        if (this.timeMS - this.fixedTimestamp > this.sm64Params.tickEveryMS) {
             // Get the keyboard inputs
             let stickX  = 0.0;
             let stickY  = 0.0;
@@ -164,31 +170,42 @@ export default class Main {
             if (stick.length() > 0.0) { stick.normalize(); }
 
             // Tick the Game
+            this.prevPositionArr.set(this.positionArr);
+            this.webrioPrevPositionArr.set(this.webrioPositionArr);
             const numTrianglesUsed = Webrio._webrio_tick(0, 0, stick.x, stick.z, buttonA, 0, 0, this.webrioPositionPtr);
 
             // Update Webrio's Mesh
             this.webrioMesh.scale.set(0.01, 0.01, 0.01);
-            for(let i = 0; i < this.webrioMesh.geometry.getAttribute('position').array.length; i++){
-                this.webrioMesh.geometry.getAttribute('position').array[i] -= this.webrioPositionArr[i % 3];
-            }
-            this.webrioMesh.position.set(this.webrioPositionArr[0] * 0.01, 
-                                        this.webrioPositionArr[1] * 0.01, 
-                                        this.webrioPositionArr[2] * 0.01);
-            this.webrioMesh.geometry.getAttribute('position').needsUpdate = true;
             this.webrioMesh.geometry.getAttribute('color'   ).needsUpdate = true;
             this.webrioMesh.geometry.getAttribute('normal'  ).needsUpdate = true;
             this.webrioMesh.geometry.getAttribute('uv'      ).needsUpdate = true;
 
-            // Update the Camera
-            this.world.camera.position.add(this.webrioMesh.position.clone().sub(this.webrioLastPosition));
-            this.webrioLastPosition.copy(this.webrioMesh.position);
-            this.world.controls.target.set(this.webrioPositionArr[0] * 0.01,
-                                           this.webrioPositionArr[1] * 0.01 + 1.5,
-                                           this.webrioPositionArr[2] * 0.01);
-            this.world.controls.update();
-
-            this.lastTimeMS = timeMS;
+            if(this.timeMS - this.fixedTimestamp > this.sm64Params.tickEveryMS * 10){
+                this.fixedTimestamp = this.timeMS;
+            }else{
+                this.fixedTimestamp += this.sm64Params.tickEveryMS;
+            }
         }
+
+        // Interpolate this.interPositionArr between this.prevPositionArr and this.positionArr
+        let t = Math.min(Math.max((this.timeMS - this.fixedTimestamp) / this.sm64Params.tickEveryMS, 0.0), 1.0);
+        for (let i = 0; i < 9 * 1024; i++) {
+            if(i < 3){ this.webrioInterPositionArr[i] = (this.webrioPrevPositionArr[i] * (1 - t) + this.webrioPositionArr[i] * t); }
+            this.interPositionArr[i] = (this.prevPositionArr[i] * (1 - t) + this.positionArr[i] * t) - this.webrioInterPositionArr[i % 3];
+        }
+        this.webrioGeometry.getAttribute('position').needsUpdate = true;
+        this.webrioMesh.position.set(this.webrioInterPositionArr[0] * 0.01,
+                                     this.webrioInterPositionArr[1] * 0.01,
+                                     this.webrioInterPositionArr[2] * 0.01);
+
+        // Update the Camera using the interpolated position
+        this.world.camera.position.add(this.webrioMesh.position.clone().sub(this.webrioLastPosition));
+        this.world.controls.target.set(this.webrioInterPositionArr[0] * 0.01,
+                                       this.webrioInterPositionArr[1] * 0.01 + 1.5,
+                                       this.webrioInterPositionArr[2] * 0.01);
+        this.world.controls.update();
+        this.webrioLastPosition.copy(this.webrioMesh.position);
+
 
         // Render the three.js Scene
         this.world.renderer.render(this.world.scene, this.world.camera);
